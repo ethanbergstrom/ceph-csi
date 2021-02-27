@@ -32,9 +32,6 @@ parameters:
    # Set thickProvision to true if you want RBD images to be fully allocated on
    # creation (thin provisioning is the default).
    thickProvision: "false"
-   # (required) RBD image features, CSI creates image with image-format 2
-   # CSI RBD currently supports only `layering` feature.
-   imageFeatures: layering
 
    # (optional) mapOptions is a comma-separated list of map options.
    # For krbd options refer
@@ -53,15 +50,11 @@ parameters:
    # The secrets have to contain Ceph credentials with required access
    # to the 'pool'.
    csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
-   csi.storage.k8s.io/provisioner-secret-namespace: default
+   csi.storage.k8s.io/provisioner-secret-namespace: ceph-system
    csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret
-   csi.storage.k8s.io/controller-expand-secret-namespace: default
+   csi.storage.k8s.io/controller-expand-secret-namespace: ceph-system
    csi.storage.k8s.io/node-stage-secret-name: csi-rbd-secret
-   csi.storage.k8s.io/node-stage-secret-namespace: default
-
-   # (optional) Specify the filesystem type of the volume. If not specified,
-   # csi-provisioner will set default as `ext4`.
-   csi.storage.k8s.io/fstype: ext4
+   csi.storage.k8s.io/node-stage-secret-namespace: ceph-system
 
    # (optional) uncomment the following to use rbd-nbd as mounter
    # on supported nodes

@@ -3,6 +3,7 @@ kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cephfsplugin
+  namespace: ceph-system
 spec:
   selector:
     matchLabels:
@@ -13,10 +14,7 @@ spec:
         app: csi-cephfsplugin
     spec:
       serviceAccount: cephfs-csi-nodeplugin
-      priorityClassName: system-node-critical
       hostNetwork: true
-      # to use e.g. Rook orchestrated cluster, and mons' FQDN is
-      # resolved through k8s service, set dns policy to cluster first
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: driver-registrar
@@ -27,9 +25,8 @@ spec:
             privileged: true
           image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.0.1
           args:
-            - "--v=5"
-            - "--csi-address=/csi/csi.sock"
-            - "--kubelet-registration-path=/var/lib/kubelet/plugins/cephfs.csi.ceph.com/csi.sock"
+            - "--csi-address=/run/csi/socket"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/cephfs.csi.ceph.com/socket"
           env:
             - name: KUBE_NODE_NAME
               valueFrom:
@@ -37,7 +34,7 @@ spec:
                   fieldPath: spec.nodeName
           volumeMounts:
             - name: socket-dir
-              mountPath: /csi
+              mountPath: /run/csi
             - name: registration-dir
               mountPath: /registration
         - name: csi-cephfsplugin
@@ -53,31 +50,21 @@ spec:
             - "--type=cephfs"
             - "--nodeserver=true"
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--v=5"
             - "--drivername=cephfs.csi.ceph.com"
-            # If topology based provisioning is desired, configure required
-            # node labels representing the nodes topology domain
-            # and pass the label names below, for CSI to consume and advertise
-            # its equivalent topology domain
-            # - "--domainlabels=failure-domain/region,failure-domain/zone"
           env:
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
             - name: NODE_ID
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: CSI_ENDPOINT
-              value: unix:///csi/csi.sock
+              value: unix:///run/csi/socket
           imagePullPolicy: "IfNotPresent"
           volumeMounts:
             - name: socket-dir
-              mountPath: /csi
+              mountPath: /run/csi
             - name: mountpoint-dir
               mountPath: /var/lib/kubelet/pods
-              mountPropagation: Bidirectional
+              mountPropagation: "Bidirectional"
             - name: plugin-dir
               mountPath: /var/lib/kubelet/plugins
               mountPropagation: "Bidirectional"
@@ -94,28 +81,6 @@ spec:
               mountPath: /etc/ceph-csi-config/
             - name: keys-tmp-dir
               mountPath: /tmp/csi/keys
-        - name: liveness-prometheus
-          securityContext:
-            privileged: true
-          image: quay.io/cephcsi/cephcsi:canary
-          args:
-            - "--type=liveness"
-            - "--endpoint=$(CSI_ENDPOINT)"
-            - "--metricsport=8681"
-            - "--metricspath=/metrics"
-            - "--polltime=60s"
-            - "--timeout=3s"
-          env:
-            - name: CSI_ENDPOINT
-              value: unix:///csi/csi.sock
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
-          imagePullPolicy: "IfNotPresent"
       volumes:
         - name: socket-dir
           hostPath:
@@ -152,19 +117,3 @@ spec:
           emptyDir: {
             medium: "Memory"
           }
----
-# This is a service to expose the liveness metrics
-apiVersion: v1
-kind: Service
-metadata:
-  name: csi-metrics-cephfsplugin
-  labels:
-    app: csi-metrics
-spec:
-  ports:
-    - name: http-metrics
-      port: 8080
-      protocol: TCP
-      targetPort: 8681
-  selector:
-    app: csi-cephfsplugin
